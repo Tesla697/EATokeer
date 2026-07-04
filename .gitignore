@@ -1,0 +1,26 @@
+# ── NEVER commit these — live EA login credentials / secrets ──
+# saved EA Desktop sessions (OTT, cookies) = full account access
+snapshots/
+# account list (emails, snapshot paths)
+accounts.json
+# may hold api_key + machine-specific paths
+config.json
+# cached machineHash
+ea_token_data.json
+# which account is currently swapped in
+active_account.txt
+# a live session cookie, if ever present
+ea_cookies.json
+
+# ── runtime / per-machine ──
+quota.json
+*.log
+eatokeer.log
+
+# ── python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
