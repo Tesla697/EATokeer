@@ -135,9 +135,18 @@ def get_access_token_from_memory() -> str:
     try:
         addrs = pattern_scan_all(pm.process_handle, BEARER_MARKER, return_multiple=True) or []
         for addr in addrs:
-            try:
-                blob = pm.read_bytes(addr + len(BEARER_MARKER), 4000)
-            except Exception:
+            start = addr + len(BEARER_MARKER)
+            # EA JUNO access tokens are large (several KB). Read a big window so
+            # the JWT isn't truncated — a cut-off token => AUTHENTICATION_FAILED.
+            # Fall back to smaller reads if the window crosses a region boundary.
+            blob = None
+            for size in (32768, 16384, 8192):
+                try:
+                    blob = pm.read_bytes(start, size)
+                    break
+                except Exception:
+                    continue
+            if not blob:
                 continue
             text = blob.decode("latin-1", "replace")
             # anchored: token must start right after "Bearer " so empty
