@@ -163,10 +163,21 @@ def swap_to(account: dict, timeout: int = 60) -> None:
 def ensure_active(account: dict, timeout: int = 60) -> None:
     """Swap to `account` only if it isn't already the active one."""
     if get_active() == account["name"]:
-        # Already active — confirm the token is still scrapeable, else re-swap.
+        # Already the active account. The bearer token may simply not be
+        # resident in EADesktop memory yet (EA App still starting up, or idle
+        # between API calls). WAIT for it before resorting to a disruptive
+        # kill + cold-restart, which only makes things slower/flakier.
         try:
             if ea_minter.get_access_token_from_memory():
                 return
         except Exception:
-            logger.info(f"'{account['name']}' marked active but token missing; re-swapping.")
+            pass
+        logger.info(
+            f"'{account['name']}' is active but no token resident yet; "
+            f"waiting up to {timeout}s for the EA App to surface it..."
+        )
+        if wait_for_token(timeout):
+            logger.info(f"Token appeared for '{account['name']}' without a swap.")
+            return
+        logger.info(f"Still no token after {timeout}s; re-swapping '{account['name']}' as a last resort.")
     swap_to(account, timeout)

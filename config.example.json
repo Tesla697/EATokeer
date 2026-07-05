@@ -2,7 +2,7 @@
   "port": 8092,
   "daily_limit": 5,
   "api_key": "",
-  "swap_timeout": 60,
+  "swap_timeout": 180,
   "auto_start_ea": true,
   "ea_desktop_exe": "C:\\Program Files\\Electronic Arts\\EA Desktop\\EA Desktop\\EADesktop.exe"
 }
