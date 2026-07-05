@@ -111,7 +111,14 @@ def get_machine_hash() -> str:
 
 
 def get_access_token_from_memory() -> str:
-    """Read the bearer token from the currently logged-in EADesktop.exe."""
+    """Read the bearer token from the currently logged-in EADesktop.exe.
+
+    EADesktop holds MANY `authorization=Bearer ` strings in memory; most are
+    empty header templates whose next bytes are `\\r\\nCookie: ...` etc. So we
+    scan ALL matches, keep only those where a real token starts *immediately*
+    after the marker (anchored match — placeholders are skipped), then prefer a
+    JWT (`eyJ...`) / the longest candidate.
+    """
     try:
         import pymem
         from pymem.pattern import pattern_scan_all
@@ -124,22 +131,41 @@ def get_access_token_from_memory() -> str:
         raise RuntimeError(
             "Could not open EADesktop.exe. Is the EA App running and logged in?"
         ) from exc
+    candidates: list[str] = []
     try:
-        addr = pattern_scan_all(pm.process_handle, BEARER_MARKER, return_multiple=False)
-        if not addr:
-            raise RuntimeError("Could not find access token pattern in EA App memory.")
-        blob = pm.read_bytes(addr + len(BEARER_MARKER), 10000)
+        addrs = pattern_scan_all(pm.process_handle, BEARER_MARKER, return_multiple=True) or []
+        for addr in addrs:
+            try:
+                blob = pm.read_bytes(addr + len(BEARER_MARKER), 4000)
+            except Exception:
+                continue
+            text = blob.decode("latin-1", "replace")
+            # anchored: token must start right after "Bearer " so empty
+            # "Bearer \r\nCookie:" placeholders yield no match and are skipped.
+            m = re.match(r"[a-zA-Z0-9=._\-]+", text)
+            if m:
+                candidates.append(m.group(0))
     finally:
         try:
             pm.close_process()
         except Exception:
             pass
 
-    text = blob.decode("latin-1", "replace")
-    m = re.search(r"([a-zA-Z0-9=._\-]+)", text)
-    if not m:
-        raise RuntimeError("Found token pattern but could not extract the token.")
-    return m.group(1)
+    if not candidates:
+        raise RuntimeError(
+            "Could not find an access token in EA App memory (only empty Bearer "
+            "placeholders). The EA App may not be fully logged in yet."
+        )
+    jwts = [t for t in candidates if t.startswith("eyJ")]
+    if jwts:
+        return max(jwts, key=len)
+    longish = [t for t in candidates if len(t) >= 100]
+    if longish:
+        return max(longish, key=len)
+    raise RuntimeError(
+        f"Found Bearer markers but only short placeholders (e.g. {candidates[0]!r}); "
+        "no valid access token resident yet."
+    )
 
 
 def generate_token(raw_ticket: str, expected_content_id: str = "") -> str:
